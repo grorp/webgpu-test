@@ -6,7 +6,7 @@ struct Camera {
 struct Input {
     [[location(0)]] vertexPosition: vec4<f32>;
 
-    [[location(1)]] matrixPart0: vec4<f32>;
+    [[location(1)]] matrixPart0: vec4<f32>; // The mat4x4 is split up because a vec4 is the maximum allowed size.
     [[location(2)]] matrixPart1: vec4<f32>;
     [[location(3)]] matrixPart2: vec4<f32>;
     [[location(4)]] matrixPart3: vec4<f32>;
