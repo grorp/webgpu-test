@@ -14,6 +14,7 @@ import fragmentWGSL from "./fragment.wgsl";
     const contextFormat = context.getPreferredFormat(adapter);
     const contextSize = vec2.create();
 
+    let texture;
     let depthTexture;
 
     let contextNeedsConfigure = true;
@@ -31,12 +32,23 @@ import fragmentWGSL from "./fragment.wgsl";
                 size: contextSize,
             });
 
+            if (texture) {
+                texture.destroy();
+            }
+            texture = device.createTexture({
+                format: contextFormat,
+                size: contextSize,
+                sampleCount: 4,
+                usage: GPUTextureUsage.RENDER_ATTACHMENT,
+            });
+
             if (depthTexture) {
                 depthTexture.destroy();
             }
             depthTexture = device.createTexture({
                 format: "depth32float",
                 size: contextSize,
+                sampleCount: 4,
                 usage: GPUTextureUsage.RENDER_ATTACHMENT,
             });
         }
@@ -89,6 +101,9 @@ import fragmentWGSL from "./fragment.wgsl";
     const pipeline = device.createRenderPipeline({
         primitive: {
             topology: "triangle-list",
+        },
+        multisample: {
+            count: 4,
         },
 
         vertex: {
@@ -183,7 +198,7 @@ import fragmentWGSL from "./fragment.wgsl";
         colorAttachments: [
             {
                 loadValue: vec4.fromValues(0.0, 0.0, 0.0, 1.0),
-                storeOp: "store",
+                storeOp: "discard",
             },
         ],
         depthStencilAttachment: {
@@ -198,7 +213,8 @@ import fragmentWGSL from "./fragment.wgsl";
     const render = () => {
         configureContext();
 
-        renderPass.colorAttachments[0].view = context
+        renderPass.colorAttachments[0].view = texture.createView();
+        renderPass.colorAttachments[0].resolveTarget = context
             .getCurrentTexture()
             .createView();
         renderPass.depthStencilAttachment.view = depthTexture.createView();
