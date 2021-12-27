@@ -1,12 +1,6 @@
 import { vec2, vec4 } from "gl-matrix";
-import { positions, indices } from "./cube.js";
-import {
-    cameraMatrix,
-    instanceMatrices,
-    instanceColors,
-    lightMatrices,
-    lightColors,
-} from "./scene.js";
+import cube from "./cube.js";
+import scene from "./scene.js";
 
 import vertexWGSL from "./vertex.wgsl";
 import fragmentWGSL from "./fragment.wgsl";
@@ -21,11 +15,6 @@ import fragmentWGSL from "./fragment.wgsl";
     const contextSize = vec2.create();
 
     let depthTexture;
-
-    const cameraBuffer = device.createBuffer({
-        size: 64,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
 
     let contextNeedsConfigure = true;
 
@@ -50,12 +39,6 @@ import fragmentWGSL from "./fragment.wgsl";
                 size: contextSize,
                 usage: GPUTextureUsage.RENDER_ATTACHMENT,
             });
-
-            device.queue.writeBuffer(
-                cameraBuffer,
-                0,
-                cameraMatrix(contextSize),
-            );
         }
     };
 
@@ -74,43 +57,34 @@ import fragmentWGSL from "./fragment.wgsl";
     onDevicePixelRatioChange();
 
     const positionsBuffer = device.createBuffer({
-        size: positions.byteLength,
+        size: cube.positions.byteLength,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
-    device.queue.writeBuffer(positionsBuffer, 0, positions);
+    device.queue.writeBuffer(positionsBuffer, 0, cube.positions);
 
     const indicesBuffer = device.createBuffer({
-        size: indices.byteLength,
+        size: cube.indices.byteLength,
         usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
     });
-    device.queue.writeBuffer(indicesBuffer, 0, indices);
+    device.queue.writeBuffer(indicesBuffer, 0, cube.indices);
 
-    const instances = instanceMatrices.length;
+    const cameraBuffer = device.createBuffer({
+        size: 64,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
 
     const instancesBuffer = device.createBuffer({
-        size: 80 * instances,
+        size: scene.instancesBuffer.byteLength,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
-    for (const [index, matrix] of instanceMatrices.entries()) {
-        device.queue.writeBuffer(instancesBuffer, 80 * index, matrix);
-    }
-    for (const [index, color] of instanceColors.entries()) {
-        device.queue.writeBuffer(instancesBuffer, 80 * index + 64, color);
-    }
-
-    const lights = lightMatrices.length;
+    device.queue.writeBuffer(instancesBuffer, 0, scene.instancesBuffer);
 
     const lightsBuffer = device.createBuffer({
-        size: 80 * lights,
+        size: scene.lightsBuffer.byteLength,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         // STORAGE instead of UNIFORM because STORAGE allows us to use dynamically sized arrays.
     });
-    for (const [index, matrix] of lightMatrices.entries()) {
-        device.queue.writeBuffer(lightsBuffer, 80 * index, matrix);
-    }
-    for (const [index, color] of lightColors.entries()) {
-        device.queue.writeBuffer(lightsBuffer, 80 * index + 64, color);
-    }
+    device.queue.writeBuffer(lightsBuffer, 0, scene.lightsBuffer);
 
     const pipeline = device.createRenderPipeline({
         primitive: {
@@ -229,6 +203,9 @@ import fragmentWGSL from "./fragment.wgsl";
             .createView();
         renderPass.depthStencilAttachment.view = depthTexture.createView();
 
+        scene.updateCameraBuffer(contextSize);
+        device.queue.writeBuffer(cameraBuffer, 0, scene.cameraBuffer);
+
         const commandEncoder = device.createCommandEncoder();
         const passEncoder = commandEncoder.beginRenderPass(renderPass);
         passEncoder.setPipeline(pipeline);
@@ -236,7 +213,7 @@ import fragmentWGSL from "./fragment.wgsl";
         passEncoder.setIndexBuffer(indicesBuffer, "uint32");
         passEncoder.setVertexBuffer(0, positionsBuffer);
         passEncoder.setVertexBuffer(1, instancesBuffer);
-        passEncoder.drawIndexed(indices.length, instances);
+        passEncoder.drawIndexed(cube.indices.length, scene.instances);
         passEncoder.endPass();
         device.queue.submit([commandEncoder.finish()]);
 

@@ -1,52 +1,64 @@
 import { mat4, vec3 } from "gl-matrix";
 
-const cameraMatrix = (size) => {
-    const viewMatrix = mat4.create();
-    mat4.rotateY(viewMatrix, viewMatrix, Math.PI / 8);
-    mat4.translate(viewMatrix, viewMatrix, vec3.fromValues(0, 2.5, 10));
+const cameraBuffer = new ArrayBuffer(64);
+
+const viewMatrix = mat4.create();
+const projectionMatrix = mat4.create();
+const cameraMatrix = new Float32Array(cameraBuffer, 0, 16);
+
+const updateCameraBuffer = (size) => {
+    mat4.identity(viewMatrix);
+    mat4.rotateY(viewMatrix, viewMatrix, performance.now() / 1000);
+    mat4.translate(viewMatrix, viewMatrix, vec3.fromValues(0, 0, 120));
     mat4.invert(viewMatrix, viewMatrix);
 
-    const projectionMatrix = mat4.create();
-    mat4.perspective(projectionMatrix, Math.PI / 3, size[0] / size[1], 1, 100);
+    mat4.perspective(projectionMatrix, Math.PI / 3, size[0] / size[1], 1, 300);
 
-    const cameraMatrix = mat4.create();
+    mat4.identity(cameraMatrix);
     mat4.multiply(cameraMatrix, viewMatrix, cameraMatrix);
     mat4.multiply(cameraMatrix, projectionMatrix, cameraMatrix);
-
-    return cameraMatrix;
 };
 
-const instance1Matrix = mat4.create();
-const instance1Color = vec3.fromValues(0.51, 0.09, 0.13);
+const instances = 1000000;
+const instancesBuffer = new ArrayBuffer(80 * instances);
 
-const instance2Matrix = mat4.create();
-mat4.translate(instance2Matrix, instance2Matrix, vec3.fromValues(0, 1.375, 0));
-mat4.scale(instance2Matrix, instance2Matrix, vec3.fromValues(0.25, 0.25, 0.25));
-const instance2Color = vec3.fromValues(1, 0, 1);
+for (let index = 0; index < instances; index = index + 1) {
+    const instanceMatrix = new Float32Array(instancesBuffer, 80 * index, 16);
+    mat4.identity(instanceMatrix);
+    mat4.translate(
+        instanceMatrix,
+        instanceMatrix,
+        vec3.fromValues(
+            Math.random() * 60 - 30,
+            Math.random() * 60 - 30,
+            Math.random() * 60 - 30,
+        ),
+    );
 
-const instance3Matrix = mat4.create();
-mat4.translate(instance3Matrix, instance3Matrix, vec3.fromValues(-2, 2, -2));
-mat4.scale(instance3Matrix, instance3Matrix, vec3.fromValues(0.25, 0.25, 0.25));
-const instance3Color = vec3.fromValues(1, 1, 1);
+    const instanceColor = new Float32Array(instancesBuffer, 80 * index + 64, 3);
+    instanceColor[0] = Math.random();
+    instanceColor[1] = Math.random();
+    instanceColor[2] = Math.random();
+}
 
-const instanceMatrices = [instance1Matrix, instance2Matrix, instance3Matrix];
-const instanceColors = [instance1Color, instance2Color, instance3Color];
+const lights = 1;
+const lightsBuffer = new ArrayBuffer(80 * lights);
 
-const light1Matrix = mat4.clone(instance3Matrix);
-const light1Color = vec3.clone(instance3Color);
-vec3.scale(light1Color, light1Color, 8);
+const lightMatrix1 = new Float32Array(lightsBuffer, 0, 16);
+mat4.identity(lightMatrix1);
 
-const light2Matrix = mat4.clone(instance1Matrix);
-const light2Color = vec3.clone(instance1Color);
-vec3.scale(light2Color, light2Color, 0.5);
+const lightColor1 = new Float32Array(lightsBuffer, 64, 3);
+lightColor1[0] = 360;
+lightColor1[1] = 360;
+lightColor1[2] = 360;
 
-const lightMatrices = [light1Matrix, light2Matrix];
-const lightColors = [light1Color, light2Color];
-
-export {
-    cameraMatrix,
-    instanceMatrices,
-    instanceColors,
-    lightMatrices,
-    lightColors,
+const scene = {
+    cameraBuffer,
+    updateCameraBuffer,
+    instances,
+    instancesBuffer,
+    lights,
+    lightsBuffer,
 };
+
+export default scene;
