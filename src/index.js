@@ -9,7 +9,7 @@ const device = await adapter.requestDevice();
 
 const canvas = document.getElementById("canvas");
 const context = canvas.getContext("webgpu");
-const canvasSize = vec2.fromValues(canvas.width, canvas.height);
+
 const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 
 context.configure({
@@ -17,21 +17,49 @@ context.configure({
     format: canvasFormat,
 });
 
-const texture = device.createTexture({
+let canvasSize = vec2.fromValues(canvas.width, canvas.height);
+let texture = device.createTexture({
     size: canvasSize,
     sampleCount: 4,
     format: canvasFormat,
     usage: GPUTextureUsage.RENDER_ATTACHMENT,
 });
-const textureView = texture.createView();
-
-const depthTexture = device.createTexture({
+let depthTexture = device.createTexture({
     size: canvasSize,
     sampleCount: 4,
     format: "depth32float",
     usage: GPUTextureUsage.RENDER_ATTACHMENT,
 });
-const depthTextureView = depthTexture.createView();
+
+const observer = new ResizeObserver((entries) => {
+    const box = entries[0].devicePixelContentBoxSize[0];
+    canvas.width = box.inlineSize;
+    canvas.height = box.blockSize;
+    canvasSize = vec2.fromValues(canvas.width, canvas.height);
+
+    if (texture) {
+        texture.destroy();
+    }
+
+    texture = device.createTexture({
+        size: canvasSize,
+        sampleCount: 4,
+        format: canvasFormat,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    if (depthTexture) {
+        depthTexture.destroy();
+    }
+
+    depthTexture = device.createTexture({
+        size: canvasSize,
+        sampleCount: 4,
+        format: "depth32float",
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+});
+observer.observe(canvas, { box: "device-pixel-content-box" });
 
 const vertexBuffer = device.createBuffer({
     size: cube.vertices.byteLength,
@@ -184,7 +212,7 @@ const render = () => {
     const passEncoder = commandEncoder.beginRenderPass({
         colorAttachments: [
             {
-                view: textureView,
+                view: texture.createView(),
                 resolveTarget: context.getCurrentTexture().createView(),
 
                 loadOp: "clear",
@@ -194,7 +222,7 @@ const render = () => {
         ],
 
         depthStencilAttachment: {
-            view: depthTextureView,
+            view: depthTexture.createView(),
 
             depthLoadOp: "clear",
             depthClearValue: 1,

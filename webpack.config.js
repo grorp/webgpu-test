@@ -5,7 +5,7 @@ const dir = dirname(fileURLToPath(import.meta.url));
 import HTMLPlugin from "html-webpack-plugin";
 
 export default {
-    mode: "production",
+    mode: "development",
 
     entry: join(dir, "src", "index.js"),
     output: {
