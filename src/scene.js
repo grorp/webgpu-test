@@ -1,4 +1,4 @@
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 
 const cameraBuffer = new ArrayBuffer(64);
 
@@ -12,53 +12,62 @@ const updateCameraBuffer = (size) => {
     mat4.translate(viewMatrix, viewMatrix, vec3.fromValues(0, 0, 120));
     mat4.invert(viewMatrix, viewMatrix);
 
-    mat4.perspective(projectionMatrix, Math.PI / 3, size[0] / size[1], 1, 300);
+    mat4.perspective(
+        projectionMatrix,
+        Math.PI * 0.4,
+        size[0] / size[1],
+        1,
+        300
+    );
 
     mat4.identity(cameraMatrix);
     mat4.multiply(cameraMatrix, viewMatrix, cameraMatrix);
     mat4.multiply(cameraMatrix, projectionMatrix, cameraMatrix);
 };
 
-const instances = 1000000;
-const instancesBuffer = new ArrayBuffer(80 * instances);
+const instances = 10000;
+const instanceBuffer = new ArrayBuffer(instances * 80);
 
-for (let index = 0; index < instances; index = index + 1) {
-    const instanceMatrix = new Float32Array(instancesBuffer, 80 * index, 16);
+for (let i = 0; i < instances; i++) {
+    const instanceMatrix = new Float32Array(instanceBuffer, i * 80, 16);
     mat4.identity(instanceMatrix);
     mat4.translate(
         instanceMatrix,
         instanceMatrix,
         vec3.fromValues(
-            Math.random() * 60 - 30,
-            Math.random() * 60 - 30,
-            Math.random() * 60 - 30,
-        ),
+            Math.random() * 600 - 300,
+            Math.random() * 600 - 300,
+            Math.random() * 600 - 300
+        )
     );
+    mat4.scale(instanceMatrix, instanceMatrix, vec3.fromValues(10, 10, 10));
 
-    const instanceColor = new Float32Array(instancesBuffer, 80 * index + 64, 3);
-    instanceColor[0] = Math.random();
-    instanceColor[1] = Math.random();
-    instanceColor[2] = Math.random();
+    const instanceColor = new Float32Array(instanceBuffer, i * 80 + 64, 3);
+    vec3.set(instanceColor, Math.random(), Math.random(), Math.random());
 }
 
-const lights = 1;
-const lightsBuffer = new ArrayBuffer(80 * lights);
+const lights = 2;
+const lightBuffer = new ArrayBuffer(lights * 32);
 
-const lightMatrix1 = new Float32Array(lightsBuffer, 0, 16);
-mat4.identity(lightMatrix1);
+const lightPos1 = new Float32Array(lightBuffer, 0 * 32, 4);
+vec4.set(lightPos1, -30, -30, -30, 1);
 
-const lightColor1 = new Float32Array(lightsBuffer, 64, 3);
-lightColor1[0] = 360;
-lightColor1[1] = 360;
-lightColor1[2] = 360;
+const lightColor1 = new Float32Array(lightBuffer, 0 * 32 + 16, 3);
+vec3.set(lightColor1, 200, 200, 200);
+
+const lightPos2 = new Float32Array(lightBuffer, 1 * 32, 4);
+vec4.set(lightPos2, 30, 30, 30, 1);
+
+const lightColor2 = new Float32Array(lightBuffer, 1 * 32 + 16, 3);
+vec3.set(lightColor2, 200, 200, 200);
 
 const scene = {
     cameraBuffer,
     updateCameraBuffer,
     instances,
-    instancesBuffer,
+    instanceBuffer,
     lights,
-    lightsBuffer,
+    lightBuffer,
 };
 
 export default scene;

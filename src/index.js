@@ -1,239 +1,217 @@
 import { vec2, vec4 } from "gl-matrix";
 import cube from "./cube.js";
 import scene from "./scene.js";
-
 import vertexWGSL from "./vertex.wgsl";
 import fragmentWGSL from "./fragment.wgsl";
 
-(async () => {
-    const adapter = await navigator.gpu.requestAdapter();
-    const device = await adapter.requestDevice();
+const adapter = await navigator.gpu.requestAdapter();
+const device = await adapter.requestDevice();
 
-    const canvas = document.getElementById("canvas");
-    const context = canvas.getContext("webgpu");
-    const contextFormat = context.getPreferredFormat(adapter);
-    const contextSize = vec2.create();
+const canvas = document.getElementById("canvas");
+const context = canvas.getContext("webgpu");
+const canvasSize = vec2.fromValues(canvas.width, canvas.height);
+const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 
-    let texture;
-    let depthTexture;
+context.configure({
+    device,
+    format: canvasFormat,
+});
 
-    let contextNeedsConfigure = true;
+const texture = device.createTexture({
+    size: canvasSize,
+    sampleCount: 4,
+    format: canvasFormat,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+});
+const textureView = texture.createView();
 
-    const configureContext = () => {
-        if (contextNeedsConfigure) {
-            contextNeedsConfigure = false;
+const depthTexture = device.createTexture({
+    size: canvasSize,
+    sampleCount: 4,
+    format: "depth32float",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+});
+const depthTextureView = depthTexture.createView();
 
-            contextSize[0] = canvas.clientWidth * window.devicePixelRatio;
-            contextSize[1] = canvas.clientHeight * window.devicePixelRatio;
+const vertexBuffer = device.createBuffer({
+    size: cube.vertices.byteLength,
+    usage: GPUBufferUsage.VERTEX,
+    mappedAtCreation: true,
+});
+new Float32Array(vertexBuffer.getMappedRange()).set(cube.vertices);
+vertexBuffer.unmap();
 
-            context.configure({
-                device,
-                format: contextFormat,
-                size: contextSize,
-            });
+const indexBuffer = device.createBuffer({
+    size: cube.indices.byteLength,
+    usage: GPUBufferUsage.INDEX,
+    mappedAtCreation: true,
+});
+new Uint32Array(indexBuffer.getMappedRange()).set(cube.indices);
+indexBuffer.unmap();
 
-            if (texture) {
-                texture.destroy();
-            }
-            texture = device.createTexture({
-                format: contextFormat,
-                size: contextSize,
-                sampleCount: 4,
-                usage: GPUTextureUsage.RENDER_ATTACHMENT,
-            });
+const instanceBuffer = device.createBuffer({
+    size: scene.instanceBuffer.byteLength,
+    usage: GPUBufferUsage.VERTEX,
+    mappedAtCreation: true,
+});
+new Float32Array(instanceBuffer.getMappedRange()).set(
+    new Float32Array(scene.instanceBuffer)
+);
+instanceBuffer.unmap();
 
-            if (depthTexture) {
-                depthTexture.destroy();
-            }
-            depthTexture = device.createTexture({
-                format: "depth32float",
-                size: contextSize,
-                sampleCount: 4,
-                usage: GPUTextureUsage.RENDER_ATTACHMENT,
-            });
-        }
-    };
+const cameraBuffer = device.createBuffer({
+    size: 64,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+});
 
-    window.addEventListener("resize", () => {
-        contextNeedsConfigure = true;
-    });
-    const onDevicePixelRatioChange = () => {
-        contextNeedsConfigure = true;
+const lightBuffer = device.createBuffer({
+    size: scene.lightBuffer.byteLength,
+    // STORAGE instead of UNIFORM because STORAGE allows us to use dynamically sized arrays.
+    usage: GPUBufferUsage.STORAGE,
+    mappedAtCreation: true,
+});
+new Float32Array(lightBuffer.getMappedRange()).set(
+    new Float32Array(scene.lightBuffer)
+);
+lightBuffer.unmap();
 
-        window
-            .matchMedia("(resolution: " + window.devicePixelRatio + "dppx)")
-            .addEventListener("change", onDevicePixelRatioChange, {
-                once: true,
-            });
-    };
-    onDevicePixelRatioChange();
+const pipeline = device.createRenderPipeline({
+    layout: "auto",
 
-    const positionsBuffer = device.createBuffer({
-        size: cube.positions.byteLength,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-    device.queue.writeBuffer(positionsBuffer, 0, cube.positions);
-
-    const indicesBuffer = device.createBuffer({
-        size: cube.indices.byteLength,
-        usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-    });
-    device.queue.writeBuffer(indicesBuffer, 0, cube.indices);
-
-    const cameraBuffer = device.createBuffer({
-        size: 64,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    const instancesBuffer = device.createBuffer({
-        size: scene.instancesBuffer.byteLength,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-    device.queue.writeBuffer(instancesBuffer, 0, scene.instancesBuffer);
-
-    const lightsBuffer = device.createBuffer({
-        size: scene.lightsBuffer.byteLength,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        // STORAGE instead of UNIFORM because STORAGE allows us to use dynamically sized arrays.
-    });
-    device.queue.writeBuffer(lightsBuffer, 0, scene.lightsBuffer);
-
-    const pipeline = device.createRenderPipeline({
-        primitive: {
-            topology: "triangle-list",
-        },
-        multisample: {
-            count: 4,
-        },
-
-        vertex: {
-            module: device.createShaderModule({
-                code: vertexWGSL,
-            }),
-            entryPoint: "main",
-            buffers: [
-                {
-                    arrayStride: 16,
-                    stepMode: "vertex",
-                    attributes: [
-                        {
-                            shaderLocation: 0,
-                            format: "float32x4",
-                            offset: 0,
-                        },
-                    ],
-                },
-                {
-                    arrayStride: 80,
-                    stepMode: "instance",
-                    attributes: [
-                        {
-                            shaderLocation: 1,
-                            format: "float32x4",
-                            offset: 0,
-                        },
-                        {
-                            shaderLocation: 2,
-                            format: "float32x4",
-                            offset: 16,
-                        },
-                        {
-                            shaderLocation: 3,
-                            format: "float32x4",
-                            offset: 32,
-                        },
-                        {
-                            shaderLocation: 4,
-                            format: "float32x4",
-                            offset: 48,
-                        },
-                        {
-                            shaderLocation: 5,
-                            format: "float32x4",
-                            offset: 64,
-                        },
-                    ],
-                },
-            ],
-        },
-
-        fragment: {
-            module: device.createShaderModule({
-                code: fragmentWGSL,
-            }),
-            entryPoint: "main",
-            targets: [
-                {
-                    format: contextFormat,
-                },
-            ],
-        },
-
-        depthStencil: {
-            depthWriteEnabled: true,
-            depthCompare: "less",
-            format: "depth32float",
-        },
-    });
-
-    const bindGroup = device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [
+    vertex: {
+        module: device.createShaderModule({
+            code: vertexWGSL,
+        }),
+        entryPoint: "main",
+        buffers: [
             {
-                binding: 0,
-                resource: {
-                    buffer: cameraBuffer,
-                },
+                arrayStride: 16,
+                stepMode: "vertex",
+                attributes: [
+                    {
+                        format: "float32x4",
+                        offset: 0,
+                        shaderLocation: 0,
+                    },
+                ],
             },
             {
-                binding: 1,
-                resource: {
-                    buffer: lightsBuffer,
-                },
+                arrayStride: 80,
+                stepMode: "instance",
+                attributes: [
+                    {
+                        format: "float32x4",
+                        offset: 0,
+                        shaderLocation: 1,
+                    },
+                    {
+                        format: "float32x4",
+                        offset: 16,
+                        shaderLocation: 2,
+                    },
+                    {
+                        format: "float32x4",
+                        offset: 32,
+                        shaderLocation: 3,
+                    },
+                    {
+                        format: "float32x4",
+                        offset: 48,
+                        shaderLocation: 4,
+                    },
+                    {
+                        format: "float32x3",
+                        offset: 64,
+                        shaderLocation: 5,
+                    },
+                ],
             },
         ],
-    });
+    },
 
-    const renderPass = {
+    primitive: {
+        topology: "triangle-list",
+        cullMode: "back",
+    },
+
+    depthStencil: {
+        format: "depth32float",
+        depthWriteEnabled: true,
+        depthCompare: "less",
+    },
+
+    multisample: {
+        count: 4,
+    },
+
+    fragment: {
+        module: device.createShaderModule({
+            code: fragmentWGSL,
+        }),
+        entryPoint: "main",
+        targets: [
+            {
+                format: canvasFormat,
+            },
+        ],
+    },
+});
+
+const bindGroup = device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [
+        {
+            binding: 0,
+            resource: {
+                buffer: cameraBuffer,
+            },
+        },
+        {
+            binding: 1,
+            resource: {
+                buffer: lightBuffer,
+            },
+        },
+    ],
+});
+
+const render = () => {
+    scene.updateCameraBuffer(canvasSize);
+    device.queue.writeBuffer(cameraBuffer, 0, scene.cameraBuffer);
+
+    const commandEncoder = device.createCommandEncoder();
+
+    const passEncoder = commandEncoder.beginRenderPass({
         colorAttachments: [
             {
-                loadValue: vec4.fromValues(0.0, 0.0, 0.0, 1.0),
-                storeOp: "discard",
+                view: textureView,
+                resolveTarget: context.getCurrentTexture().createView(),
+
+                loadOp: "clear",
+                clearValue: vec4.fromValues(0, 0, 0, 1),
+                storeOp: "store",
             },
         ],
+
         depthStencilAttachment: {
-            depthLoadValue: 1.0,
+            view: depthTextureView,
+
+            depthLoadOp: "clear",
+            depthClearValue: 1.0,
             depthStoreOp: "store",
-
-            stencilLoadValue: 1.0,
-            stencilStoreOp: "store",
         },
-    };
+    });
+    passEncoder.setPipeline(pipeline);
+    passEncoder.setBindGroup(0, bindGroup);
+    passEncoder.setIndexBuffer(indexBuffer, "uint32");
+    passEncoder.setVertexBuffer(0, vertexBuffer);
+    passEncoder.setVertexBuffer(1, instanceBuffer);
+    passEncoder.drawIndexed(cube.indices.length, scene.instances);
+    passEncoder.end();
 
-    const render = () => {
-        configureContext();
+    device.queue.submit([commandEncoder.finish()]);
 
-        renderPass.colorAttachments[0].view = texture.createView();
-        renderPass.colorAttachments[0].resolveTarget = context
-            .getCurrentTexture()
-            .createView();
-        renderPass.depthStencilAttachment.view = depthTexture.createView();
-
-        scene.updateCameraBuffer(contextSize);
-        device.queue.writeBuffer(cameraBuffer, 0, scene.cameraBuffer);
-
-        const commandEncoder = device.createCommandEncoder();
-        const passEncoder = commandEncoder.beginRenderPass(renderPass);
-        passEncoder.setPipeline(pipeline);
-        passEncoder.setBindGroup(0, bindGroup);
-        passEncoder.setIndexBuffer(indicesBuffer, "uint32");
-        passEncoder.setVertexBuffer(0, positionsBuffer);
-        passEncoder.setVertexBuffer(1, instancesBuffer);
-        passEncoder.drawIndexed(cube.indices.length, scene.instances);
-        passEncoder.endPass();
-        device.queue.submit([commandEncoder.finish()]);
-
-        requestAnimationFrame(render);
-    };
     requestAnimationFrame(render);
-})();
+};
+
+requestAnimationFrame(render);

@@ -1,23 +1,20 @@
 struct Light {
-    matrix: mat4x4<f32>;
-    color: vec3<f32>;
+    position: vec4<f32>,
+    color: vec3<f32>,
 };
 struct Lights {
-    lights: array<Light>;
+    lights: array<Light>,
 };
-[[group(0), binding(1)]] var<storage> lights: Lights;
+@group(0) @binding(1) var<storage> lights: Lights;
 
 struct Input {
-    [[location(0)]] fragmentPosition: vec4<f32>;
-
-    [[location(1)]] color: vec3<f32>;
+    @location(0) worldPosition: vec4<f32>,
+    @location(1) color: vec3<f32>,
 };
 
-type Output = vec4<f32>;
+@fragment
 
-[[stage(fragment)]]
-
-fn main(input: Input) -> [[location(0)]] Output {
+fn main(input: Input) -> @location(0) vec4<f32> {
     let materialColor = clamp(
         input.color,
         vec3<f32>(0.0, 0.0, 0.0),
@@ -26,13 +23,13 @@ fn main(input: Input) -> [[location(0)]] Output {
 
     var lightColor = vec3<f32>(0.0, 0.0, 0.0);
     for (
-        var index = u32(0);
-        index < arrayLength(&lights.lights);
-        index = index + u32(1)
+        var i: u32 = 0;
+        i < arrayLength(&lights.lights);
+        i++
     ) {
         lightColor = lightColor +
-            lights.lights[index].color *
-            (1.0 / pow(distance(input.fragmentPosition, lights.lights[index].matrix * vec4<f32>(0.0, 0.0, 0.0, 1.0)), 2.0));
+            lights.lights[i].color *
+            (1.0 / pow(distance(lights.lights[i].position, input.worldPosition), 2.0));
     };
 
     let finalColor = clamp(

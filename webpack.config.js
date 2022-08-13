@@ -1,35 +1,39 @@
-import { dirname as pathDir, join as joinPath } from "path";
+import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-const dir = pathDir(fileURLToPath(import.meta.url));
+const dir = dirname(fileURLToPath(import.meta.url));
 
 import HTMLPlugin from "html-webpack-plugin";
 
 export default {
     mode: "production",
 
-    entry: joinPath(dir, "src", "index.js"),
+    entry: join(dir, "src", "index.js"),
     output: {
-        path: joinPath(dir, "dist"),
+        path: join(dir, "dist"),
         filename: "index.js",
     },
 
     module: {
         rules: [
             {
-                test: /\.wgsl$/,
-                type: "asset/source",
-            },
-            {
                 test: /\.html$/,
                 loader: "html-loader",
+            },
+            {
+                test: /\.wgsl$/,
+                type: "asset/source",
             },
         ],
     },
 
     plugins: [
         new HTMLPlugin({
-            template: joinPath(dir, "src", "index.html"),
+            template: join(dir, "src", "index.html"),
             filename: "index.html",
         }),
     ],
+
+    experiments: {
+        topLevelAwait: true,
+    },
 };
