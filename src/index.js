@@ -197,7 +197,7 @@ const render = () => {
             view: depthTextureView,
 
             depthLoadOp: "clear",
-            depthClearValue: 1.0,
+            depthClearValue: 1,
             depthStoreOp: "store",
         },
     });
